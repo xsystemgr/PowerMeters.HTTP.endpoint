@@ -2,11 +2,32 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from chirpstack_api import integration
 from google.protobuf.json_format import Parse
-import struct
-import binascii
+from struct import unpack
+
+def decode_payload(payload):
+    serial_number = unpack('>I', bytes.fromhex(payload[0:8]))[0]
+    fragment_number = int(payload[8:10], 16)
+    param_bytes = int(payload[10:12], 16)
+    total_kwh = unpack('>f', bytes.fromhex(payload[12:20]))[0]
+    voltage = unpack('>f', bytes.fromhex(payload[20:28]))[0]
+    #current = unpack('>Q', bytes.fromhex(payload[28:52]))[0]
+    frequency = unpack('>f', bytes.fromhex(payload[44:52] + '00000000'))[0]
+
+    #power_factor = unpack('>f', bytes.fromhex(payload[36:44]))[0]
+
+    return {
+        "Serial Number": serial_number,
+        "Fragment Number": fragment_number,
+        "Number of Parameter Bytes": param_bytes,
+        "Total kWh": total_kwh,
+        "Voltage": voltage,
+        #"Current": current,
+       # "Power Factor": power_factor,
+        "Frequency": frequency
+    }
 
 class Handler(BaseHTTPRequestHandler):
-    # True - JSON marshaler
+    # True -  JSON marshaler
     # False - Protobuf marshaler (binary)
     json = True
 
@@ -25,23 +46,16 @@ class Handler(BaseHTTPRequestHandler):
             self.join(body)
 
         else:
-            print("Handler for event %s is not implemented" % query_args["event"][0])
+            print("handler for event %s is not implemented" % query_args["event"][0])
 
     def up(self, body):
         up = self.unmarshal(body, integration.UplinkEvent())
-        decoded_data_step2 = self.decode_step2(up.data.hex())
-        if decoded_data_step2:
-            serial_number, num_bytes, total_kwh, crc = decoded_data_step2
-            print("Uplink received from: %s with payload:" % up.device_info.dev_eui)
-            print("Serial Number: %s" % serial_number)
-            print("Number of Data Bytes Sent: %s" % num_bytes)
-            print("Total kWh: %f" % total_kwh)
-            print("CRC: %s" % crc)
+        decoded_payload = decode_payload(up.data.hex())
+        print("Uplink received from: %s with decoded payload: %s" % (up.device_info.dev_eui, decoded_payload))
 
     def join(self, body):
         join = self.unmarshal(body, integration.JoinEvent())
         print("Device: %s joined with DevAddr: %s" % (join.device_info.dev_eui, join.dev_addr))
-
 
     def unmarshal(self, body, pl):
         if self.json:
@@ -49,19 +63,6 @@ class Handler(BaseHTTPRequestHandler):
 
         pl.ParseFromString(body)
         return pl
-
-    def decode_step2(self, data):
-        if len(data) < 21:
-            print("Invalid data length")
-            return
-
-        serial_number = struct.unpack('>I', bytes.fromhex(data[:8]))[0]
-        num_bytes = int(data[8], 16)
-        total_kwh = struct.unpack('>f', bytes.fromhex(data[9:17]))[0]
-        crc = data[17:21]
-
-        return serial_number, num_bytes, total_kwh, crc
-
 
 httpd = HTTPServer(('', 5000), Handler)
 httpd.serve_forever()
