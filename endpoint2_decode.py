@@ -6,6 +6,7 @@ from struct import unpack
 
 def decode_payload(payload):
     serial_number = unpack('>I', bytes.fromhex(payload[0:8]))[0]
+    #serial_number = int(payload[0:8], 16)
     fragment_number = int(payload[8:10], 16)
     param_bytes = int(payload[10:12], 16)
     total_kwh = unpack('>f', bytes.fromhex(payload[12:20]))[0]
