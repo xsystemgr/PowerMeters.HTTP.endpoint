@@ -11,7 +11,7 @@ class Handler(BaseHTTPRequestHandler):
     json = False
 
     config = configparser.ConfigParser()
-    config.read('config.cfg')  # Αντικαταστήστε με το όνομα του πραγματικού αρχείου διαμόρφωσης
+    config.read('config.cfg')
 
     redis_client = redis.StrictRedis(
         host=config.get('Redis', 'host'),
